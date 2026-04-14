@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <title>資本都市 V24.3 - 10x10 | 15人每人一塊 | 國產署未售地購買</title>
+  <style>
+    :root {
+      --comm:#ff4d4d; --resi:#ffcc00; --indu:#8b4513;
+      --road:#555; --gov:#0078d4; --lock:#2980b9; --protect:#9b59b6;
+      --unsold:#3a3a3a; /* 未售地底色（不改原本三色，僅用標籤識別） */
+    }
+    body {
+      font-family:'Microsoft JhengHei', sans-serif; background:#121212; color:#e0e0e0;
+      display:flex; flex-direction:column; align-items:center; padding:20px;
+    }
+    .header {
+      width:100%; max-width:1400px; display:flex; justify-content:space-between; align-items:center;
+      background:#333; padding:15px; border-radius:8px; margin-bottom:20px; box-shadow:0 4px 15px rgba(0,0,0,0.5);
+    }
+    .container { display:flex; gap:20px; max-width:1400px; width:100%; }
+
+    /* 排行榜 */
+    .rank-panel {
+      width:320px; background:#1e1e1e; padding:15px; border-radius:8px; border:1px solid #333;
+      display:flex; flex-direction:column;
+    }
+    .rank-item { margin-bottom:12px; font-size:13px; border-bottom:1px solid #444; padding-bottom:8px; }
+    .val-assets { color:#4caf50; font-weight:bold; }
+    .val-income { color:#aaa; margin-left:8px; font-size:11px; }
+    .ai-log {
+      font-size:11px; color:#888; background:#000; padding:8px; border-radius:4px;
+      height:120px; overflow-y:auto; margin-top:10px; border:1px solid #333;
+    }
+
+    /* 地圖 */
+    .main-view { flex-grow:1; display:flex; flex-direction:column; align-items:center; }
+    .grid {
+      display:grid;
+      grid-template-columns:repeat(10, 56px);
+      grid-template-rows:repeat(10, 56px);
+      gap:8px;
+      background:#222; padding:12px; border-radius:10px;
+    }
+    .tile {
+      width:56px; height:56px; border-radius:6px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      cursor:pointer; transition:0.2s; font-size:10px; font-weight:bold; text-align:center; position:relative;
+
+      border-bottom:calc(var(--f) * 2px) solid rgba(0,0,0,0.4);
+      transform:translateY(calc(var(--f) * -1.2px));
+      box-shadow:0 calc(var(--f) * 1.6px) 4px rgba(0,0,0,0.5);
+      user-select:none;
+    }
+    .tile:hover { filter:brightness(1.15); transform:translateY(calc(var(--f) * -1.2px - 3px)); }
+
+    .protect-tag { position:absolute; bottom:2px; left:2px; background:var(--protect); color:white; font-size:9px; padding:1px 4px; border-radius:3px; z-index:10; }
+    .gov-tag { position:absolute; bottom:2px; right:2px; background:rgba(0,0,0,0.45); color:#fff; font-size:9px; padding:1px 4px; border-radius:3px; z-index:10; border:1px solid rgba(255,255,255,0.25); }
+    .unsold-tag { position:absolute; top:2px; left:2px; background:rgba(0,0,0,0.55); color:#fff; font-size:9px; padding:1px 4px; border-radius:3px; z-index:10; border:1px solid rgba(255,255,255,0.18); }
+    .is-locked::after { content:"🔒"; position:absolute; top:4px; right:4px; font-size:13px; }
+
+    .c { background:var(--comm); }
+    .r { background:var(--resi); color:black; }
+    .i { background:var(--indu); }
+    .rd { background:var(--road); transform:none !important; border:none !important; box-shadow:none !important; color:#777; cursor:default; }
+    .gov { background:var(--gov); }
+
+    /* 管理中心 */
+    .side-panel { width:420px; background:#1e1e1e; padding:15px; border-radius:8px; border:1px solid #333; }
+    .xray-view { background:#2d2d2d; padding:10px; border-radius:5px; margin:10px 0; max-height:420px; overflow-y:auto; }
+    .floor { border-left:4px solid #d4a017; margin-bottom:4px; padding:8px; font-size:11px; background:#3d3d3d; }
+    .btn-action { width:100%; padding:10px; margin-top:5px; border:none; border-radius:4px; cursor:pointer; font-weight:bold; }
+  </style>
+</head>
+
+<body>
+  <!-- 模式選擇遮罩 -->
+  <div id="modeOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:1000; display:flex; align-items:center; justify-content:center;">
+    <div style="text-align:center; background:#333; padding:40px; border-radius:15px; border:2px solid #d4a017;">
+      <h1>🌆 資本都市 V24.3</h1>
+      <p>10×10｜15人每人一塊｜其餘土地向國產署購買（地價×1.5）</p>
+      <button class="btn-action" style="background:#4caf50; padding:15px 30px;" onclick="startGame('easy')">簡單模式</button>
+      <button class="btn-action" style="background:#e67e22; padding:15px 30px;" onclick="startGame('normal')">一般模式</button>
+    </div>
+  </div>
+
+  <div class="header">
+    <div><b>資本都市</b> | <span id="gameYear">2026</span> 年</div>
+    <div id="playerCash" style="color:#4caf50; font-size:26px; font-weight:bold;">$3,000萬</div>
+    <button style="background:#d4a017; padding:12px 25px; border:none; border-radius:5px; font-weight:bold; cursor:pointer;" onclick="nextTurn()">完成年度結算</button>
+  </div>
+
+  <div class="container">
+    <div class="rank-panel">
+      <h3 style="color:#d4a017;">🏆 家族資產排行</h3>
+      <div id="rankList"></div>
+      <div id="aiActionLog" class="ai-log">AI 行動紀錄...</div>
+    </div>
+
+    <div class="main-view">
+      <div style="margin-bottom:12px; display:flex; gap:10px;">
+        <button class="btn-action" style="width:auto; background:#444;" onclick="switchLayer('default')">角色分區</button>
+        <button class="btn-action" style="width:auto; background:#2980b9;" onclick="switchLayer('lock')">產權狀態</button>
+        <button id="mergeModeBtn" class="btn-action" style="width:auto; background:#0078d4;" onclick="toggleMergeMode()">🔗 啟動合併</button>
+      </div>
+      <div class="grid" id="cityGrid"></div>
+      <div style="margin-top:10px; font-size:12px; color:#aaa;">
+        ＊灰=道路｜藍=國有不可動｜紅/黃/棕未標「未售」＝有人持有｜標「未售」＝向國產署買（地價×1.5）
+      </div>
+    </div>
+
+    <div class="side-panel">
+      <h3 id="detail-title">管理中心</h3>
+      <div id="detail-panel" style="display:none;">
+        <div id="financials" style="background:#222; padding:12px; border-radius:5px; border-left:4px solid #d4a017; margin-bottom:10px;"></div>
+        <div id="xray" class="xray-view"></div>
+        <div id="action-area"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const GRID_N = 10;
+
+    // 固定地圖：r=住宅(黃) c=商業(紅) i=工業(棕) gov=國有(藍) rd=道路(灰)
+    const MAP_LAYOUT = [
+      ['r','r','r','r','rd','c','rd','rd','i','i'],
+      ['r','i','r','r','rd','c','rd','rd','r','r'],
+      ['rd','rd','rd','rd','rd','rd','rd','rd','rd','rd'],
+      ['r','r','r','rd','r','c','rd','rd','c','r'],
+      ['i','i','r','rd','r','c','rd','rd','c','r'],
+      ['r','i','r','rd','r','c','rd','rd','c','r'],
+      ['r','i','r','rd','r','c','rd','rd','c','r'],
+      ['c','c','c','rd','gov','c','rd','rd','c','r'],
+      ['rd','rd','rd','rd','rd','rd','rd','rd','rd','rd'],
+      ['gov','gov','i','i','i','i','rd','rd','r','r']
+    ];
+
+    // ✅ 15人名單（玩家是 KAI）
+    const PLAYER_NAME = 'KAI';
+    const roleNames = ['劉光','景','小光','力洋','KAI','李政政','番茄','石律師','顏經理','王董','何先生','徐先生','李教授','老電','黃賢'];
+
+    let playerCash = 3000, currentYear = 2026, selectedTile = null, currentLayer = 'default', gameMode = 'normal';
+    let isMergeMode = false, mergeSelection = [], groupCounter = 0, city = {};
+
+    function keyOf(r,c){ return `${r}-${c}`; }
+    function isRoad(r,c){
+      if (r < 0 || c < 0 || r >= GRID_N || c >= GRID_N) return false;
+      return MAP_LAYOUT[r][c] === 'rd';
+    }
+
+    // ✅ 道路數 = 上下左右相鄰 road 的數量（0~4）
+    function getRoadAccess(r, c) {
+      let roads = 0;
+      if (isRoad(r-1,c)) roads++;
+      if (isRoad(r+1,c)) roads++;
+      if (isRoad(r,c-1)) roads++;
+      if (isRoad(r,c+1)) roads++;
+      return roads;
+    }
+
+    // 層數上限（baseMaxF）
+    // 工業：0路=1F、>=1路=2F
+    // 商/住：0/1/2/4 路固定，3路需要「整併至少一次」才能到12F（rebuild 時才放行）
+    function calculateMaxF(type, r, c) {
+      const roads = getRoadAccess(r, c);
+
+      if (type === 'i') return roads === 0 ? 1 : 2;
+
+      if (type === 'c') {
+        if (roads === 0) return 2;
+        if (roads === 1) return 7;
+        if (roads === 2) return 9;
+        if (roads >= 4) return 2;
+        return 9; // roads==3 base仍 9
+      }
+
+      if (type === 'r') {
+        if (roads === 0) return 3;
+        if (roads === 1) return 7;
+        if (roads === 2) return 9;
+        if (roads >= 4) return 2;
+        return 9; // roads==3 base仍 9
+      }
+
+      return 0;
+    }
+
+    function landValOf(type){
+      return type==='c' ? 3000 : (type==='r' ? 1000 : 500);
+    }
+    function bizRateOf(type){
+      return type==='c' ? 360 : (type==='r' ? 180 : 420);
+    }
+    function maintOf(type){
+      return type==='c' ? 24 : (type==='r' ? 18 : 12);
+    }
+
+    // ✅ 建立城市：每人只拿到 1 塊；其他可建地全部變成「國產署未售地」
+    function setupCityOnePlotEach() {
+      city = {};
+
+      // 先建立所有非道路格
+      const buildableCoords = [];
+      for (let r=0; r<GRID_N; r++){
+        for (let c=0; c<GRID_N; c++){
+          const t = MAP_LAYOUT[r][c];
+          if (t === 'rd') continue;
+          const coord = keyOf(r,c);
+
+          if (t === 'gov') {
+            city[coord] = {
+              name:'國有署',
+              type:'gov',
+              landVal:2000,
+              floorsData: [],
+              isLocked: true,
+              protectYears: 9999
+            };
+            continue;
+          }
+
+          buildableCoords.push(coord);
+
+          const baseMax = calculateMaxF(t, r, c);
+          city[coord] = {
+            name: '國有署',           // ✅ 未售：先屬於國產署（但 type 仍是 r/c/i）
+            type: t,
+            isAI: false,             // 國產署不跑 AI 行為
+            cash: 0,
+            landVal: landValOf(t),
+            bizRate: bizRateOf(t),
+            maint: maintOf(t),
+            rentPrice: t==='c'?40:20, // 保留但不再用來算收入
+            baseMaxF: baseMax,
+            maxF: baseMax,
+            isLocked: false,
+            protectYears: 0,
+            groupId: null,
+            mergeCount: 0,
+            floorsData: []           // ✅ 未售地：空白（0F）
+          };
+        }
+      }
+
+      // 從可建地抽 15 格，分配給 15 人（每人一塊）
+      const shuffled = [...buildableCoords].sort(() => Math.random() - 0.5);
+      roleNames.forEach((name, idx) => {
+        const coord = shuffled[idx];
+        const d = city[coord];
+        if (!d || d.type === 'gov') return;
+
+        d.name = name;
+        d.isAI = (name !== PLAYER_NAME);
+        d.cash = d.isAI ? 1500 : 0;
+
+        // 每人開局給 1F（可玩）
+        d.floorsData = [{ tenant: null, lease: 0 }];
+      });
+    }
+
+    function calculateFloorIncome(d, idx) {
+      let base = d.bizRate;
+      const is1F = (idx === 0);
+      const isTop = (idx === d.floorsData.length - 1);
+
+      if (d.type !== 'i') {
+        if (is1F) base = Math.floor(base * 1.5);
+        else if (isTop && d.floorsData.length >= 4) base = Math.floor(base * 1.2);
+      }
+      return base;
+    }
+
+    // ✅ 新模型：地主該層收益 = inc（空屋）或 inc*1.15（有租客）
+    function floorOwnerRevenue(d, idx, f) {
+      const inc = calculateFloorIncome(d, idx);
+      return Math.floor(inc * (f.tenant ? 1.15 : 1.0));
+    }
+
+    function init() {
+      const grid = document.getElementById('cityGrid');
+      grid.innerHTML = '';
+
+      for (let r = 0; r < GRID_N; r++) {
+        for (let c = 0; c < GRID_N; c++) {
+          const coord = keyOf(r,c);
+          const layoutType = MAP_LAYOUT[r][c];
+          const d = city[coord];
+
+          const tile = document.createElement('div');
+
+          if (layoutType === 'rd') {
+            tile.className = 'tile rd';
+            tile.innerText = '道路';
+          } else if (d) {
+            const fCount = d.floorsData?.length ?? 0;
+            tile.className = `tile ${d.type} ${d.isLocked ? 'is-locked' : ''} ${d.protectYears>0 ? 'is-protected' : ''}`;
+            tile.style.setProperty('--f', fCount);
+
+            const nameShort = (d.name && d.name.length > 3) ? d.name.slice(0,3) : d.name;
+            tile.innerHTML = `<span>${nameShort}</span><br><span>${fCount}F</span>`;
+
+            if (d.type === 'gov') {
+              tile.innerHTML += `<div class="gov-tag">🏛️</div>`;
+            } else if (d.name === '國有署') {
+              tile.innerHTML += `<div class="unsold-tag">未售</div>`;
+            }
+
+            if (d.protectYears > 0 && d.type !== 'gov') {
+              tile.innerHTML += `<div class="protect-tag">保護</div>`;
+            }
+
+            tile.onclick = () => isMergeMode ? handleMergeClick(coord) : showDetail(r, c);
+          } else {
+            tile.className = 'tile';
+            tile.style.background = '#333';
+            tile.innerText = '空地';
+          }
+
+          grid.appendChild(tile);
+        }
+      }
+
+      updateRank();
+      document.getElementById('playerCash').innerText = `$${Math.floor(playerCash)}萬`;
+    }
+
+    function updateRank() {
+      const stats = roleNames.map(name => {
+        let assets = (name === PLAYER_NAME ? playerCash : 0);
+        let income = 0;
+
+        for (let k in city) {
+          const d = city[k];
+
+          // 資產：只有真實持有人才算（未售地不列入任何人資產）
+          if (d.name === name) {
+            assets += d.landVal + ((d.floorsData?.length ?? 0) * 1000) + (d.isAI ? d.cash : 0);
+          }
+
+          // 收益：只有地主拿，且需有樓層才有收益
+          if (d.type !== 'gov' && d.name === name && (d.floorsData?.length ?? 0) > 0) {
+            d.floorsData.forEach((f, i) => {
+              const maint = (d.isLocked && d.protectYears === 0) ? Math.floor(d.maint * 1.2) : d.maint;
+              income += floorOwnerRevenue(d, i, f);
+              income -= maint;
+            });
+          }
+        }
+
+        return { name, assets, income };
+      });
+
+      stats.sort((a,b) => b.assets - a.assets);
+      document.getElementById('rankList').innerHTML = stats.map((s,i)=>`
+        <div class="rank-item"><b>${i+1}. ${s.name}</b><br>
+        <span class="val-assets">$${Math.floor(s.assets)}萬</span>
+        <span class="val-income">收益: $${Math.floor(s.income)}萬</span></div>
+      `).join('');
+    }
+
+    function nextTurn() {
+      currentYear++;
+      document.getElementById('aiActionLog').innerHTML = `<b>AI 行動記錄:</b><br>`;
+
+      let turnInc = 0;
+
+      for (let k in city) {
+        const d = city[k];
+        if (!d) continue;
+
+        // 藍色國有地：永遠不動
+        if (d.type === 'gov') {
+          d.isLocked = true;
+          d.protectYears = 9999;
+          continue;
+        }
+
+        // ✅ 未售地（國產署持有的 r/c/i）：不跑租約、不跑收益、不跑 AI 行為
+        if (d.name === '國有署') continue;
+
+        // 保護倒數
+        if (d.protectYears > 0) {
+          d.protectYears--;
+          if (d.protectYears === 0) d.isLocked = false;
+        }
+
+        if (d.floorsData && d.floorsData.length > 0) {
+          d.floorsData.forEach((f, i) => {
+            // 租約：tenant 有值就倒數；到期 -> 空屋（地主直營）
+            if (f.tenant) {
+              f.lease--;
+              if (f.lease <= 0) {
+                f.tenant = null;
+                f.lease = 0;
+              }
+            } else {
+              // 空屋：有機率招租（5年一簽）
+              if (Math.random() < 0.2) {
+                const pool = [...roleNames, '連鎖超商', '品牌商'];
+                f.tenant = pool[Math.floor(Math.random() * pool.length)];
+                f.lease = 5;
+              }
+            }
+
+            // 收益：只有玩家當地主才影響 playerCash
+            const maint = (d.isLocked && d.protectYears === 0) ? Math.floor(d.maint * 1.2) : d.maint;
+            if (d.name === PLAYER_NAME) {
+              turnInc += floorOwnerRevenue(d, i, f);
+              turnInc -= maint;
+            }
+          });
+        }
+
+        // AI 行為：只有 AI 且不是未售地才跑
+        if (d.isAI) {
+          d.cash += 200;
+          if (Math.random() < 0.08 && d.floorsData.length > 0 && d.floorsData.length < d.maxF) {
+            d.floorsData.push({ tenant: null, lease: 0 });
+            document.getElementById('aiActionLog').innerHTML += `• ${d.name} 在 ${k} 加蓋 1 層<br>`;
+          }
+        }
+      }
+
+      playerCash += Math.floor(turnInc);
+      document.getElementById('gameYear').innerText = currentYear;
+
+      init();
+      if (selectedTile) {
+        const [rr,cc] = selectedTile.split('-').map(Number);
+        showDetail(rr,cc);
+      }
+    }
+
+    function showDetail(r, c) {
+      selectedTile = keyOf(r,c);
+      const d = city[selectedTile];
+      if (!d) return;
+
+      document.getElementById('detail-panel').style.display = 'block';
+      const xray = document.getElementById('xray');
+      xray.innerHTML = '';
+
+      // 藍色國有地：完全不可動
+      if (d.type === 'gov') {
+        document.getElementById('financials').innerHTML = `地主: ${d.name}<br>狀態: 🏛️ 國有資產（不可交易）`;
+        xray.innerHTML = '🏛️ 國有資產：不可收購、不可購買、不可合併、不可重建。';
+        document.getElementById('action-area').innerHTML = '';
+        return;
+      }
+
+      const roads = getRoadAccess(r,c);
+      const fCount = d.floorsData?.length ?? 0;
+
+      // 樓層列表
+      if (fCount === 0) {
+        xray.innerHTML = `<div style="color:#bbb; padding:8px;">此地目前為空白（0F）</div>`;
+      } else {
+        d.floorsData.slice().reverse().forEach((f, j) => {
+          const idx = d.floorsData.length - 1 - j;
+          const rev = floorOwnerRevenue(d, idx, f);
+          const status = f.tenant ? `租客：${f.tenant}（剩 ${f.lease} 年）` : `空屋：地主直營`;
+          const bonusTag = f.tenant ? '（+15%）' : '';
+          xray.innerHTML += `
+            <div class="floor">
+              <b>${idx+1}F</b><br>
+              <small>${status}</small><br>
+              <small>該層收益：${rev}萬/年${bonusTag}</small>
+            </div>
+          `;
+        });
+      }
+
+      const area = document.getElementById('action-area');
+      area.innerHTML = '';
+
+      // 未售地：只能向國產署購買（地價×1.5）
+      if (d.name === '國有署') {
+        const buyPrice = Math.floor(d.landVal * 1.5);
+        document.getElementById('financials').innerHTML =
+          `地主: 國有署（未售地）<br>分區: ${d.type.toUpperCase()}｜臨路: ${roads}｜上限: ${d.maxF}F<br>` +
+          `購買價: $${buyPrice}萬（地價×1.5）`;
+
+        area.innerHTML = `<button class="btn-action" style="background:#27ae60; color:white;" onclick="buyFromGov('${selectedTile}', ${buyPrice})">🧾 向國產署購地 ($${buyPrice}萬)</button>`;
+        return;
+      }
+
+      // 一般地
+      document.getElementById('financials').innerHTML =
+        `地主: ${d.name}<br>分區: ${d.type.toUpperCase()}｜臨路: ${roads}｜上限: ${d.maxF}F<br>狀態: ${d.isLocked ? '🔒 鎖定' : '⚠️ 開放'}`;
+
+      // 玩家地主：可鎖/解鎖/重建
+      if (d.name === PLAYER_NAME) {
+        const buildVal = (d.type==='i'?1000:2000) + (fCount>1?(fCount-1)*1500:0);
+        const lockFee = Math.floor((d.landVal + buildVal) * 0.6);
+
+        if (!d.isLocked) {
+          area.innerHTML += `<button class="btn-action" style="background:#2980b9; color:white;" onclick="toggleLock(${lockFee})">🔒 鎖定產權 ($${lockFee}萬)</button>`;
+        } else if (d.protectYears === 0) {
+          area.innerHTML += `<button class="btn-action" style="background:#7f8c8d; color:white;" onclick="toggleLock(0)">🔓 解除鎖定</button>`;
+        }
+
+        area.innerHTML += `<button class="btn-action" style="background:#e67e22; color:white;" onclick="rebuildPrompt()">🏗️ 拆除重建</button>`;
+      }
+      // 非玩家：仍保留原本「強制收購」（但鎖定就不能）
+      else if (!d.isLocked) {
+        const buildVal = (d.type==='i'?1000:2000) + (fCount>1?(fCount-1)*1500:0);
+        const bVal = Math.floor((d.landVal + buildVal) * 1.4);
+        area.innerHTML = `<button class="btn-action" style="background:#e74c3c; color:white;" onclick="buyout('${selectedTile}', ${bVal})">🧨 強制收購 ($${bVal}萬)</button>`;
+      }
+    }
+
+    function toggleMergeMode() {
+      isMergeMode = !isMergeMode;
+      mergeSelection = [];
+      init();
+      const b = document.getElementById('mergeModeBtn');
+      b.innerText = isMergeMode ? "⚠️ 選擇地塊" : "🔗 啟動合併";
+      b.style.background = isMergeMode ? "#e74c3c" : "#0078d4";
+    }
+
+    // 合併：兩塊各自 +50%
+    function handleMergeClick(coord) {
+      const b = city[coord];
+      if (!b) return;
+      if (b.name !== PLAYER_NAME) return;
+      if (b.type === 'i' || b.type === 'gov') return;
+      if (b.name === '國有署') return; // 未售地不可合併
+
+      if (mergeSelection.length === 0) {
+        mergeSelection.push(coord);
+        init();
+        return;
+      }
+
+      const aKey = mergeSelection[0];
+      const a = city[aKey];
+      if (!a) { mergeSelection = []; init(); return; }
+
+      if (aKey === coord) return;
+      if (a.type !== b.type) return;
+
+      if (!confirm("合併土地？(兩塊各自 +50% 容積上限)")) return;
+
+      groupCounter++;
+
+      const newMaxA = Math.floor(a.baseMaxF * 1.5);
+      const newMaxB = Math.floor(b.baseMaxF * 1.5);
+
+      a.groupId = groupCounter;
+      b.groupId = groupCounter;
+
+      a.maxF = newMaxA;
+      b.maxF = newMaxB;
+
+      // 合併後清空（需重建）
+      a.floorsData = [];
+      b.floorsData = [];
+
+      a.isLocked = false;
+      b.isLocked = false;
+
+      a.mergeCount++;
+      b.mergeCount++;
+
+      toggleMergeMode();
+    }
+
+    function rebuildPrompt() {
+      const d = city[selectedTile];
+      if (!d || d.type === 'gov') return;
+      if (d.name !== PLAYER_NAME) return;
+      if (d.name === '國有署') return;
+
+      const [r, c] = selectedTile.split('-').map(Number);
+      const roads = getRoadAccess(r, c);
+
+      let currentLimit = d.maxF;
+      if (roads >= 3 && d.mergeCount >= 1 && d.type !== 'i') currentLimit = 12;
+
+      const targetF = parseInt(prompt(`興建層數 (上限 ${currentLimit}F)？`), 10);
+      if (isNaN(targetF) || targetF <= 0 || targetF > currentLimit) return;
+
+      const cost = 2000 + (targetF > 1 ? (targetF - 1) * 1500 : 0);
+      if (playerCash < cost) return;
+      playerCash -= cost;
+
+      if (d.groupId !== null) {
+        for (let k in city) {
+          if (city[k].groupId === d.groupId) {
+            city[k].floorsData = Array.from({ length: targetF }, () => ({ tenant: null, lease: 0 }));
+          }
+        }
+      } else {
+        d.floorsData = Array.from({ length: targetF }, () => ({ tenant: null, lease: 0 }));
+      }
+
+      init();
+      showDetail(r, c);
+    }
+
+    function startGame(m) {
+      gameMode = m;
+      document.getElementById('modeOverlay').style.display = 'none';
+      setupCityOnePlotEach();
+      init();
+    }
+
+    function switchLayer(l) {
+      currentLayer = l;
+      init();
+    }
+
+    // ✅ 向國產署購地（未售地專用）
+    function buyFromGov(coord, cost) {
+      const d = city[coord];
+      if (!d) return;
+
+      if (d.type === 'gov') {
+        alert("🏛️ 藍色國有地不可交易！");
+        return;
+      }
+      if (d.name !== '國有署') return;
+
+      if (playerCash < cost) return;
+      playerCash -= cost;
+
+      d.name = PLAYER_NAME;
+      d.isAI = false;
+      d.cash = 0;
+
+      // 買到先給 1F（避免買完還完全不能產出/不能合併）
+      if (!d.floorsData || d.floorsData.length === 0) {
+        d.floorsData = [{ tenant: null, lease: 0 }];
+      }
+
+      init();
+      const [r,c] = coord.split('-').map(Number);
+      showDetail(r,c);
+    }
+
+    // 強制收購：封鎖藍色國有；未售地不可用強制收購（只能 buyFromGov）
+    function buyout(coord, cost) {
+      const d = city[coord];
+      if (!d) return;
+
+      if (d.type === 'gov') {
+        alert("🏛️ 藍色國有地禁止強制收購！");
+        return;
+      }
+      if (d.name === '國有署') {
+        alert("此地為未售地，請用「向國產署購地（地價×1.5）」");
+        return;
+      }
+
+      if (playerCash < cost) return;
+      playerCash -= cost;
+
+      d.name = PLAYER_NAME;
+      d.isAI = false;
+      d.isLocked = true;
+      d.protectYears = 5;
+
+      init();
+      const [r,c] = coord.split('-').map(Number);
+      showDetail(r,c);
+    }
+
+    function toggleLock(fee) {
+      if (city[selectedTile]?.type === 'gov') return;
+      const d = city[selectedTile];
+      if (!d || d.name !== PLAYER_NAME) return;
+      if (d.name === '國有署') return;
+
+      if (fee > 0) {
+        if (playerCash < fee) return;
+        playerCash -= fee;
+        d.isLocked = true;
+      } else {
+        d.isLocked = false;
+      }
+
+      init();
+      const [r,c] = selectedTile.split('-').map(Number);
+      showDetail(r,c);
+    }
+  </script>
+</body>
+</html>
